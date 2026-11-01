@@ -19,6 +19,8 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 frontend/dist/
+frontend/.vite/
+.vite/
 frontend/.env.local
 frontend/.env.development.local
 frontend/.env.test.local
