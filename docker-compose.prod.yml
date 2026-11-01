@@ -9,13 +9,13 @@ services:
       - APP_ENV=production
       - DEBUG=False
       - SECRET_KEY=${SECRET_KEY:-sahay-super-secret-key-production-change-this}
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-sahay_db}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-sahay_admin}:${POSTGRES_PASSWORD:-SecurePassword123!}@postgres:5432/${POSTGRES_DB:-sahay_db}
+      - SQLITE_FALLBACK=True
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - AI_MODEL=${AI_MODEL:-gemini-3.1-flash-lite}
       - REDIS_URL=redis://redis:6379/0
     depends_on:
-      postgres:
-        condition: service_healthy
+      - postgres
     networks:
       - sahay_network
 
@@ -37,16 +37,17 @@ services:
     container_name: sahay_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:-sahay_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-SecurePassword123!}
       POSTGRES_DB: ${POSTGRES_DB:-sahay_db}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-sahay_db}"]
-      interval: 5s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sahay_admin} || pg_isready"]
+      interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 20s
     networks:
       - sahay_network
 

@@ -18,18 +18,28 @@ async_session_maker: async_sessionmaker[AsyncSession] | None = None
 active_db_type: str = "unknown"
 
 
-def is_postgres_available() -> bool:
-    """Quick probe to see if postgres socket can be reached without hanging."""
+def is_db_host_reachable(url: str, timeout: float = 1.0) -> bool:
+    """Probes if the database host and port are accepting TCP connections."""
     try:
-        with socket.create_connection(("127.0.0.1", 5432), timeout=0.3):
+        without_scheme = url.split("://", 1)[-1]
+        at_split = without_scheme.split("@", 1)
+        host_port_part = at_split[-1].split("/")[0] if len(at_split) > 1 else without_scheme.split("/")[0]
+        if ":" in host_port_part:
+            host, port_str = host_port_part.split(":", 1)
+            port = int(port_str)
+        else:
+            host = host_port_part
+            port = 5432
+
+        with socket.create_connection((host, port), timeout=timeout):
             return True
-    except (OSError, PermissionError, ConnectionRefusedError):
+    except Exception:
         return False
 
 
 def switch_to_sqlite() -> AsyncEngine:
     global engine, async_session_maker, active_db_type
-    logger.info("Initializing SQLite database for local development fallback...")
+    logger.info("Initializing SQLite database fallback...")
     engine = create_async_engine(
         settings.SQLITE_URL,
         echo=False,
@@ -52,27 +62,40 @@ def init_engine_sync() -> AsyncEngine:
     if engine is not None:
         return engine
 
-    # Check whether PostgreSQL can be used
-    if settings.DATABASE_URL.startswith("postgresql") and not settings.SQLITE_FALLBACK:
-        # User strictly wants PostgreSQL
-        engine = create_async_engine(
-            settings.DATABASE_URL,
-            echo=False,
-            future=True,
-            pool_pre_ping=True,
-            connect_args={"timeout": 2.0},
-        )
-        active_db_type = "postgresql"
-        async_session_maker = async_sessionmaker(
-            bind=engine,
-            class_=AsyncSession,
-            expire_on_commit=False,
-            autocommit=False,
-            autoflush=False,
-        )
-        return engine
+    # Check whether PostgreSQL can be used and host is reachable
+    if settings.DATABASE_URL.startswith("postgresql"):
+        if is_db_host_reachable(settings.DATABASE_URL, timeout=1.0):
+            try:
+                logger.info("Connecting to PostgreSQL database engine...")
+                engine = create_async_engine(
+                    settings.DATABASE_URL,
+                    echo=False,
+                    future=True,
+                    pool_pre_ping=True,
+                    pool_size=5,
+                    max_overflow=10,
+                    connect_args={"timeout": 5.0},
+                )
+                active_db_type = "postgresql"
+                async_session_maker = async_sessionmaker(
+                    bind=engine,
+                    class_=AsyncSession,
+                    expire_on_commit=False,
+                    autocommit=False,
+                    autoflush=False,
+                )
+                return engine
+            except Exception as e:
+                logger.warning(f"Could not initialize PostgreSQL engine: {e}")
+                if settings.SQLITE_FALLBACK:
+                    return switch_to_sqlite()
+                raise e
+        else:
+            logger.info("PostgreSQL host not currently reachable.")
+            if settings.SQLITE_FALLBACK:
+                return switch_to_sqlite()
 
-    # Otherwise default to SQLite for local development unless explicit test succeeds
+    # Otherwise default to SQLite
     return switch_to_sqlite()
 
 
@@ -116,7 +139,7 @@ async def check_database_health() -> dict:
             "status": "healthy",
             "dialect": eng.dialect.name,
             "mode": active_db_type,
-            "note": "Connected to PostgreSQL" if active_db_type == "postgresql" else "Operating in local SQLite dev mode",
+            "note": "Connected to PostgreSQL" if active_db_type == "postgresql" else "Operating in SQLite mode",
         }
     except Exception as exc:
         return {
