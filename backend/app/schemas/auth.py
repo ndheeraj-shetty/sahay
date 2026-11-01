@@ -11,6 +11,8 @@ class UserRegister(BaseModel):
     household_name: Optional[str] = Field(
         None, max_length=150, description="Optional custom name for user's primary household"
     )
+    invite_code: Optional[str] = Field(None, max_length=50, description="Invite code from household owner for family members")
+    is_owner: Optional[bool] = Field(True, description="True if owner registering new household, False if family member")
 
 
 class UserLogin(BaseModel):
@@ -77,3 +79,13 @@ class TokenResponse(BaseModel):
     user: UserProfile
     primary_household: Optional[HouseholdBasic] = None
     households: List[HouseholdBasic] = []
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    reset_code: str = Field(..., min_length=4)
+    new_password: str = Field(..., min_length=6)

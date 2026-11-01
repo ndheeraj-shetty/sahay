@@ -32,6 +32,8 @@ from app.schemas.doctor import (
     FinancialEventRequest,
     FinancialEventResponse,
     VerifyDocumentRequest,
+    DocumentCompareRequest,
+    DocumentCompareResponse,
 )
 from app.services.document_doctor import DocumentDoctorEngine
 
@@ -314,3 +316,24 @@ async def verify_document_fields(
 async def parse_financial_event(data: FinancialEventRequest):
     parsed = DocumentDoctorEngine.parse_financial_event(data.sms_or_alert_text)
     return FinancialEventResponse(**parsed)
+
+
+@router.post("/compare", response_model=DocumentCompareResponse)
+async def compare_documents(
+    payload: DocumentCompareRequest,
+    current_user: User = Depends(get_current_user),
+    household: Household = Depends(get_current_household),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        result = await DocumentDoctorEngine.compare_documents(
+            baseline_doc_id=payload.baseline_document_id,
+            updated_doc_id=payload.updated_document_id,
+            household_id=household.id,
+            db=db,
+        )
+        return DocumentCompareResponse(**result)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Comparison failed: {str(e)}")

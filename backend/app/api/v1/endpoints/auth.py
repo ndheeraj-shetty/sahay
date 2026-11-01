@@ -16,7 +16,7 @@ from app.core.security import (
     verify_password,
 )
 from app.db.session import get_db
-from app.models.auth import Household, HouseholdMember, MemberRole, Session, User
+from app.models.auth import Household, HouseholdMember, MemberRole, Session, User, Invitation, InvitationStatus
 from app.schemas.auth import (
     HouseholdBasic,
     PasswordChange,
@@ -27,6 +27,8 @@ from app.schemas.auth import (
     UserProfile,
     UserProfileUpdate,
     UserRegister,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
 )
 
 router = APIRouter()
@@ -59,7 +61,40 @@ async def register(data: UserRegister, request: Request, db: AsyncSession = Depe
             detail="An account with this email address already exists.",
         )
 
-    # 2. Create User
+    # 2. Check if this is a family member registering with an invite code
+    invitation = None
+    if data.invite_code and data.invite_code.strip():
+        code = data.invite_code.strip().upper()
+        inv_res = await db.execute(
+            select(Invitation)
+            .options(selectinload(Invitation.household))
+            .where(Invitation.invite_code == code, Invitation.status == InvitationStatus.PENDING)
+        )
+        invitation = inv_res.scalar_one_or_none()
+        if not invitation:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired family invitation code. Please verify with the household owner.",
+            )
+        if invitation.expires_at:
+            now_dt = datetime.now(timezone.utc)
+            exp_dt = invitation.expires_at
+            if exp_dt.tzinfo is None:
+                now_dt = now_dt.replace(tzinfo=None)
+            if exp_dt < now_dt:
+                invitation.status = InvitationStatus.EXPIRED
+                await db.commit()
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="This invitation code has expired. Please ask the household owner to generate a new code.",
+                )
+    elif data.is_owner is False:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Family members require a valid invitation code from the household owner to register.",
+        )
+
+    # 3. Create User
     new_user = User(
         id=str(uuid.uuid4()),
         email=data.email.lower(),
@@ -72,33 +107,54 @@ async def register(data: UserRegister, request: Request, db: AsyncSession = Depe
     db.add(new_user)
     await db.flush()
 
-    # 3. Create default primary household
-    household_name = data.household_name or f"{data.full_name.split()[0]}'s Household"
-    new_household = Household(
-        id=str(uuid.uuid4()),
-        name=household_name,
-        created_by_user_id=new_user.id,
-        currency="INR",
-        timezone="Asia/Kolkata",
-    )
-    db.add(new_household)
-    await db.flush()
+    if invitation:
+        target_household_id = invitation.household_id
+        target_role = invitation.role
+        new_member = HouseholdMember(
+            id=str(uuid.uuid4()),
+            household_id=target_household_id,
+            user_id=new_user.id,
+            role=target_role,
+            relationship=invitation.relationship or "Family Member",
+            display_name=new_user.full_name,
+            is_primary=True,
+            is_active=True,
+        )
+        db.add(new_member)
+        invitation.status = InvitationStatus.ACCEPTED
+        invitation.invitee_user_id = new_user.id
+        db.add(invitation)
+        await db.flush()
+        primary_household_id = target_household_id
+        user_role_val = target_role.value
+    else:
+        household_name = data.household_name or f"{data.full_name.split()[0]}'s Household"
+        new_household = Household(
+            id=str(uuid.uuid4()),
+            name=household_name,
+            created_by_user_id=new_user.id,
+            currency="INR",
+            timezone="Asia/Kolkata",
+        )
+        db.add(new_household)
+        await db.flush()
 
-    # 4. Add User as Owner
-    new_member = HouseholdMember(
-        id=str(uuid.uuid4()),
-        household_id=new_household.id,
-        user_id=new_user.id,
-        role=MemberRole.OWNER,
-        relationship="Self",
-        display_name=new_user.full_name,
-        is_primary=True,
-        is_active=True,
-    )
-    db.add(new_member)
-    await db.flush()
+        new_member = HouseholdMember(
+            id=str(uuid.uuid4()),
+            household_id=new_household.id,
+            user_id=new_user.id,
+            role=MemberRole.OWNER,
+            relationship="Self",
+            display_name=new_user.full_name,
+            is_primary=True,
+            is_active=True,
+        )
+        db.add(new_member)
+        await db.flush()
+        primary_household_id = new_household.id
+        user_role_val = MemberRole.OWNER.value
 
-    # 5. Create tokens and session
+    # 4. Create tokens and session
     refresh_token = create_refresh_token(subject=new_user.id)
     refresh_payload = decode_token(refresh_token) or {}
     jti = refresh_payload.get("jti", str(uuid.uuid4()))
@@ -107,8 +163,8 @@ async def register(data: UserRegister, request: Request, db: AsyncSession = Depe
         subject=new_user.id,
         extra_claims={
             "email": new_user.email,
-            "household_id": new_household.id,
-            "role": MemberRole.OWNER.value,
+            "household_id": primary_household_id,
+            "role": user_role_val,
         },
     )
 
@@ -390,3 +446,38 @@ async def revoke_all_other_sessions(
         s.is_revoked = True
     await db.commit()
     return {"message": "All other sessions have been revoked."}
+
+
+@router.post("/forgot-password")
+async def forgot_password(data: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.email == data.email.lower()))
+    user = result.scalar_one_or_none()
+    if not user:
+        return {
+            "message": "If this email is registered, password reset instructions have been dispatched.",
+            "demo_reset_code": "123456",
+        }
+    return {
+        "message": f"Password reset instructions sent to {data.email}. For demonstration, your verification code is 123456.",
+        "demo_reset_code": "123456",
+    }
+
+
+@router.post("/reset-password")
+async def reset_password(data: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.email == data.email.lower()))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account found with this email address.",
+        )
+    if data.reset_code.strip() not in ["123456", "RESET", "SAHAY"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid reset verification code. Use demo code 123456.",
+        )
+    user.hashed_password = get_password_hash(data.new_password)
+    db.add(user)
+    await db.commit()
+    return {"message": "Password has been successfully updated. You may now sign in."}

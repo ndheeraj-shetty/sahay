@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { AboutFeatureButton } from '../../components/common/AboutFeatureButton';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Users,
@@ -218,6 +219,7 @@ export const HouseholdView: React.FC = () => {
         </div>
 
         <div className="flex items-center space-x-3">
+          <AboutFeatureButton featureKey="household" />
           {isOwner && (
             <button
               onClick={() => {
@@ -354,7 +356,8 @@ export const HouseholdView: React.FC = () => {
                 </div>
 
                 <div className="flex items-center space-x-2">
-                  <div className="flex items-center space-x-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1 font-mono text-xs font-bold text-gray-800">
+                  <div className="flex items-center space-x-1.5 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1 font-mono text-xs font-bold text-sky-900">
+                    <span className="text-[10px] text-sky-600 uppercase font-sans font-bold">Join Code:</span>
                     <span>{inv.invite_code}</span>
                     <button
                       onClick={() => handleCopy(inv.invite_code)}
@@ -487,7 +490,10 @@ export const HouseholdView: React.FC = () => {
                     <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                     <span>Invitation Created Successfully!</span>
                   </div>
-                  <p>Share this invitation code with your family member:</p>
+                  <p className="font-semibold">Share this code with your family member:</p>
+                  <p className="text-[11px] text-emerald-700 mt-0.5">
+                    When registering their account, they select <b>"Family Member"</b> and paste this code to automatically join {household?.name}!
+                  </p>
                   <div className="mt-3 flex items-center justify-between rounded-lg bg-white p-2.5 border border-emerald-200">
                     <span className="font-mono font-bold text-sm text-gray-900">
                       {inviteSuccessCode}

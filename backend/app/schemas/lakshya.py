@@ -180,3 +180,37 @@ class LakshyaOverviewResponse(BaseModel):
     total_saved_amount: float
     overall_progress_percentage: float
     total_monthly_committed: float
+
+
+class GoalEmergencyReallocationItem(BaseModel):
+    goal_id: str
+    goal_title: str
+    category: str
+    current_saved: float
+    recommended_withdrawal: float
+    remaining_saved: float
+    priority_level: str
+    restoration_monthly: float
+    restoration_months: int
+
+
+class EmergencyModeReallocationRequest(BaseModel):
+    urgent_amount: float = Field(..., gt=0.0)
+    reason: str = Field(default="Medical / Pandemic Emergency")
+
+
+class EmergencyModeReallocationResponse(BaseModel):
+    urgent_amount: float
+    available_liquid_cash: float
+    deficit: float
+    total_mobilized_from_goals: float
+    shortfall_remaining: float
+    reallocations: List[GoalEmergencyReallocationItem] = []
+    advice_narrative: str
+    restoration_plan: List[str] = []
+
+
+class EmergencyModeApplyRequest(BaseModel):
+    urgent_amount: float = Field(..., gt=0.0)
+    reason: str = Field(default="Medical / Pandemic Emergency")
+    withdrawals: List[dict] = Field(default_factory=list)

@@ -11,6 +11,9 @@ import {
   GoalRiskAnalysis,
   GoalWithdrawal,
   LakshyaOverview,
+  EmergencyModeReallocationRequest,
+  EmergencyModeReallocationResponse,
+  EmergencyModeApplyRequest,
 } from '../types/lakshya';
 
 export const lakshyaService = {
@@ -82,6 +85,26 @@ export const lakshyaService = {
 
   getRiskAnalysis: async (goalId: string): Promise<GoalRiskAnalysis> => {
     const { data } = await apiClient.get<GoalRiskAnalysis>(`/lakshya/goals/${goalId}/risk`);
+    return data;
+  },
+
+  planEmergencyReallocation: async (
+    payload: EmergencyModeReallocationRequest
+  ): Promise<EmergencyModeReallocationResponse> => {
+    const { data } = await apiClient.post<EmergencyModeReallocationResponse>(
+      '/lakshya/emergency-mode/reallocate',
+      payload
+    );
+    return data;
+  },
+
+  applyEmergencyReallocation: async (
+    payload: EmergencyModeApplyRequest
+  ): Promise<{ message: string; applied_withdrawals: any[] }> => {
+    const { data } = await apiClient.post<{ message: string; applied_withdrawals: any[] }>(
+      '/lakshya/emergency-mode/apply',
+      payload
+    );
     return data;
   },
 };

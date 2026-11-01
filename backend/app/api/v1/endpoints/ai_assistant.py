@@ -123,6 +123,83 @@ async def handle_chat_message(
     db.add(user_msg)
     await db.flush()
 
+    # Check for direct affirmation to execute pending action (e.g. user says "yes", "sure", "create it")
+    q_clean = payload.query.strip().lower().strip(".!?,")
+    affirmative_phrases = {
+        "yes", "yes please", "sure", "create it", "build it", "do it",
+        "yup", "yeah", "ok", "confirm", "proceed", "go ahead",
+        "please create it", "create the goal", "build the goal vault",
+        "yes build it", "yes create it", "yes please create it"
+    }
+    is_affirmative = (q_clean in affirmative_phrases) or q_clean.startswith("yes ") or q_clean.startswith("sure ")
+
+    if is_affirmative:
+        res_action = await db.execute(
+            select(AIActionRequest)
+            .join(AIMessage, AIActionRequest.message_id == AIMessage.id)
+            .where(
+                AIMessage.conversation_id == conversation.id,
+                AIActionRequest.status == ActionStatus.PENDING,
+            )
+            .order_by(desc(AIActionRequest.created_at))
+        )
+        pending_act = res_action.scalar_one_or_none()
+
+        if not pending_act:
+            res_act2 = await db.execute(
+                select(AIActionRequest)
+                .join(AIMessage, AIActionRequest.message_id == AIMessage.id)
+                .join(AIConversation, AIMessage.conversation_id == AIConversation.id)
+                .where(
+                    AIConversation.household_id == household_id,
+                    AIActionRequest.status == ActionStatus.PENDING,
+                )
+                .order_by(desc(AIActionRequest.created_at))
+            )
+            pending_act = res_act2.scalar_one_or_none()
+
+        if pending_act:
+            pending_act.status = ActionStatus.EXECUTED
+            pending_act.resolved_at = datetime.now(timezone.utc)
+            exec_res = await AIAssistantService.execute_confirmed_action(
+                pending_act, household_id, current_user, db
+            )
+
+            if pending_act.action_type == ActionType.CREATE_GOAL:
+                target_amt = exec_res.get("target_amount", 100000.0)
+                monthly_amt = exec_res.get("monthly_commitment", 5000.0)
+                title = exec_res.get("title", "Goal Vault")
+                cat = exec_res.get("category", "custom").replace("_", " ").title()
+                confirm_text = (
+                    f"### 🎉 Lakshya Goal Vault Created Successfully!\n\n"
+                    f"I have built your new goal vault in **Lakshya Goal Vaults**:\n\n"
+                    f"| Goal Detail | Specification |\n"
+                    f"| :--- | :--- |\n"
+                    f"| **Goal Title** | **{title}** |\n"
+                    f"| **Category** | {cat} |\n"
+                    f"| **Target Amount** | **₹{target_amt:,.0f}** |\n"
+                    f"| **Monthly Commitment** | **₹{monthly_amt:,.0f} / mo** |\n"
+                    f"| **Progression Milestones** | 🟢 25%, 50%, 75%, 100% active |\n\n"
+                    f"> 💡 **Automated Rule Active**: A monthly commitment of ₹{monthly_amt:,.0f} has been scheduled for this goal. You can track, adjust, or deposit contributions anytime from the **Lakshya** tab."
+                )
+            elif pending_act.action_type == ActionType.MARK_PAID:
+                confirm_text = f"✅ Marked **{exec_res.get('title', 'obligation')}** as paid in Sahay Daily!"
+            elif pending_act.action_type == ActionType.UPDATE_MONEY_PROFILE:
+                confirm_text = f"✅ Updated household monthly income to **₹{exec_res.get('expected_monthly_income', 0):,.0f}** and planned savings to **₹{exec_res.get('planned_monthly_savings', 0):,.0f}**!"
+            else:
+                confirm_text = "✅ Action has been executed successfully."
+
+            assistant_msg = AIMessage(
+                conversation_id=conversation.id,
+                role="assistant",
+                content=confirm_text,
+                citations_json="[]",
+            )
+            db.add(assistant_msg)
+            await db.commit()
+            await db.refresh(assistant_msg)
+            return serialize_message(assistant_msg, action=pending_act)
+
     # 3. Retrieve permission-aware household context
     context = await AIAssistantService.retrieve_permission_aware_context(
         household_id=household_id,

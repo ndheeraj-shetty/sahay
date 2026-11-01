@@ -1,4 +1,5 @@
 export type ActionType =
+  | 'create_goal'
   | 'create_obligation'
   | 'mark_paid'
   | 'add_goal_contribution'
@@ -14,6 +15,11 @@ export interface AICitation {
   source_id: string;
   title: string;
   snippet: string;
+  file_name?: string | null;
+  page_number?: number | null;
+  evidence?: string | null;
+  confidence_score?: number | null;
+  verified_by_user?: boolean | null;
 }
 
 export interface AIActionResponse {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { AboutFeatureButton } from '../../components/common/AboutFeatureButton';
 import {
   Shield,
   ShieldCheck,
@@ -204,6 +205,7 @@ export const SahayShieldView: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2.5">
+          <AboutFeatureButton featureKey="shield" />
           <div className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 font-medium">
             <Lock className="w-3.5 h-3.5 text-emerald-600" />
             <span>AES-256-GCM Envelope Encryption</span>

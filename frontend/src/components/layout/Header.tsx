@@ -69,15 +69,6 @@ export const Header: React.FC = () => {
           )}
         </div>
 
-        {/* Emergency Mode shortcut button */}
-        <button
-          className="flex items-center space-x-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 transition-colors"
-          title="Emergency Mode - instant access to critical health records and doctor contacts"
-        >
-          <AlertCircle className="h-3.5 w-3.5 text-red-600" />
-          <span>Emergency Mode</span>
-        </button>
-
         {/* Notification bell */}
         <button className="relative rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors">
           <Bell className="h-4 w-4" />

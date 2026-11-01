@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { AboutFeatureButton } from '../../components/common/AboutFeatureButton';
 import {
   Heart,
   Shield,
@@ -184,6 +185,8 @@ export const HealthShieldView: React.FC = () => {
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
+
+          <AboutFeatureButton featureKey="health" />
 
           {/* CRITICAL EMERGENCY MODE CTA BUTTON */}
           <button

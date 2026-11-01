@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { AboutFeatureButton } from '../../components/common/AboutFeatureButton';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   FolderArchive,
@@ -23,6 +24,8 @@ import { vaultService } from '../../services/vaultService';
 import { DocumentCategory, DocumentResponse } from '../../types/vault';
 import { UploadDocumentModal } from './UploadDocumentModal';
 import { DocumentVerificationModal } from './DocumentVerificationModal';
+import { DocumentCompareModal } from './DocumentCompareModal';
+import { GitCompare } from 'lucide-react';
 
 export const FamilyVaultView: React.FC = () => {
   const queryClient = useQueryClient();
@@ -33,6 +36,8 @@ export const FamilyVaultView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [verifyingDocId, setVerifyingDocId] = useState<string | null>(null);
+  const [isCompareOpen, setIsCompareOpen] = useState(false);
+  const [compareBaselineId, setCompareBaselineId] = useState<string | null>(null);
 
   const { data: documents, isLoading } = useQuery({
     queryKey: ['documents', activeHousehold?.id, selectedCategory, selectedMember, searchQuery],
@@ -113,13 +118,27 @@ export const FamilyVaultView: React.FC = () => {
           </div>
         </div>
 
-        <button
-          onClick={() => setIsUploadOpen(true)}
-          className="flex items-center space-x-1.5 rounded-xl bg-sahay-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-sahay-700 transition-colors self-start sm:self-auto"
-        >
-          <UploadCloud className="h-4 w-4" />
-          <span>Upload Document</span>
-        </button>
+        <div className="flex items-center space-x-2 self-start sm:self-auto">
+          <AboutFeatureButton featureKey="vault" />
+          <button
+            onClick={() => {
+              setCompareBaselineId(null);
+              setIsCompareOpen(true);
+            }}
+            className="flex items-center space-x-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-xs font-semibold text-indigo-700 shadow-sm hover:bg-indigo-100 transition-colors"
+          >
+            <GitCompare className="h-4 w-4" />
+            <span>⚡ What Changed?</span>
+          </button>
+
+          <button
+            onClick={() => setIsUploadOpen(true)}
+            className="flex items-center space-x-1.5 rounded-xl bg-sahay-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-sahay-700 transition-colors"
+          >
+            <UploadCloud className="h-4 w-4" />
+            <span>Upload Document</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter and Search Bar */}
@@ -274,6 +293,17 @@ export const FamilyVaultView: React.FC = () => {
                         <Sparkles className="h-3.5 w-3.5" />
                         <span>Doctor Info</span>
                       </button>
+                      <button
+                        onClick={() => {
+                          setCompareBaselineId(doc.id);
+                          setIsCompareOpen(true);
+                        }}
+                        className="flex items-center space-x-1 text-xs font-semibold text-indigo-600 hover:text-indigo-700 pl-2"
+                        title="Compare what changed with another version"
+                      >
+                        <GitCompare className="h-3.5 w-3.5" />
+                        <span>Compare</span>
+                      </button>
                     </div>
                   ) : (
                     <button
@@ -333,6 +363,16 @@ export const FamilyVaultView: React.FC = () => {
           }}
         />
       )}
+
+      {/* Document Change Intelligence - What Changed Modal */}
+      <DocumentCompareModal
+        isOpen={isCompareOpen}
+        onClose={() => {
+          setIsCompareOpen(false);
+          setCompareBaselineId(null);
+        }}
+        initialBaselineId={compareBaselineId}
+      />
     </div>
   );
 };

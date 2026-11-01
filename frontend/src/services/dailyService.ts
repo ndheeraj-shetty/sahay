@@ -8,6 +8,9 @@ import {
   SnoozePayload,
   TodayViewData,
   UpdateMoneyProfilePayload,
+  HouseholdRadarResponse,
+  FamilyResponsibilityIntelligenceResponse,
+  TransferObligationPayload,
 } from '../types/daily';
 
 export const dailyService = {
@@ -72,6 +75,34 @@ export const dailyService = {
     payload: UpdateMoneyProfilePayload
   ): Promise<{ message: string; expected_monthly_income: number; planned_monthly_savings: number }> => {
     const { data } = await apiClient.post('/sahay-daily/money-profile', payload);
+    return data;
+  },
+
+  getRadarTimeline: async (): Promise<HouseholdRadarResponse> => {
+    const { data } = await apiClient.get<HouseholdRadarResponse>('/sahay-daily/radar');
+    return data;
+  },
+
+  createObligationFromRadar: async (payload: CreateObligationPayload): Promise<Obligation> => {
+    const { data } = await apiClient.post<Obligation>('/sahay-daily/radar/create-obligation', payload);
+    return data;
+  },
+
+  getResponsibilityIntelligence: async (): Promise<FamilyResponsibilityIntelligenceResponse> => {
+    const { data } = await apiClient.get<FamilyResponsibilityIntelligenceResponse>(
+      '/sahay-daily/responsibility-intelligence'
+    );
+    return data;
+  },
+
+  transferObligation: async (
+    obligationId: string,
+    payload: TransferObligationPayload
+  ): Promise<Obligation> => {
+    const { data } = await apiClient.post<Obligation>(
+      `/sahay-daily/obligations/${obligationId}/transfer`,
+      payload
+    );
     return data;
   },
 };

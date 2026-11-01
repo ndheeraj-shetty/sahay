@@ -174,3 +174,38 @@ export interface AddWithdrawalPayload {
   reason: string;
   notes?: string;
 }
+
+
+export interface GoalEmergencyReallocationItem {
+  goal_id: string;
+  goal_title: string;
+  category: string;
+  current_saved: number;
+  recommended_withdrawal: number;
+  remaining_saved: number;
+  priority_level: string;
+  restoration_monthly: number;
+  restoration_months: number;
+}
+
+export interface EmergencyModeReallocationRequest {
+  urgent_amount: number;
+  reason?: string;
+}
+
+export interface EmergencyModeReallocationResponse {
+  urgent_amount: number;
+  available_liquid_cash: number;
+  deficit: number;
+  total_mobilized_from_goals: number;
+  shortfall_remaining: number;
+  reallocations: GoalEmergencyReallocationItem[];
+  advice_narrative: string;
+  restoration_plan: string[];
+}
+
+export interface EmergencyModeApplyRequest {
+  urgent_amount: number;
+  reason?: string;
+  withdrawals: Array<{ goal_id: string; amount: number }>;
+}

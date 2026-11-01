@@ -55,3 +55,29 @@ class FinancialEventResponse(BaseModel):
     raw_text: str
     detected_at: str
     suggest_recurring: bool
+
+
+class CompareFieldChange(BaseModel):
+    field_name: str
+    baseline_value: Optional[str] = None
+    updated_value: Optional[str] = None
+    change_type: str  # "increased", "decreased", "modified", "added", "removed", "unchanged"
+    significance: str  # "high", "medium", "low"
+    impact_summary: str
+
+class DocumentCompareRequest(BaseModel):
+    baseline_document_id: str
+    updated_document_id: str
+
+class DocumentCompareResponse(BaseModel):
+    baseline_document_id: str
+    baseline_title: str
+    baseline_type: str
+    updated_document_id: str
+    updated_title: str
+    updated_type: str
+    executive_summary: str
+    key_alerts: List[str]
+    field_changes: List[CompareFieldChange]
+    ai_explanation: str
+    created_at: str

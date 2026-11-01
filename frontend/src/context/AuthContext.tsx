@@ -25,7 +25,11 @@ interface AuthContextType {
     full_name: string;
     phone?: string;
     household_name?: string;
+    invite_code?: string;
+    is_owner?: boolean;
   }) => Promise<void>;
+  forgotPassword: (email: string) => Promise<{ message: string; demo_reset_code?: string }>;
+  resetPassword: (payload: { email: string; reset_code: string; new_password: string }) => Promise<{ message: string }>;
   logout: () => Promise<void>;
   switchHousehold: (householdId: string) => Promise<void>;
   refreshHousehold: () => Promise<void>;
@@ -108,9 +112,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     full_name: string;
     phone?: string;
     household_name?: string;
+    invite_code?: string;
+    is_owner?: boolean;
   }) => {
     const data = await authService.register(payload);
     handleAuthSuccess(data);
+  };
+
+  const forgotPassword = async (email: string) => {
+    return await authService.forgotPassword(email);
+  };
+
+  const resetPassword = async (payload: { email: string; reset_code: string; new_password: string }) => {
+    return await authService.resetPassword(payload);
   };
 
   const logout = async () => {
@@ -155,6 +169,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         closeAuthModal: () => setIsAuthModalOpen(false),
         login,
         register,
+        forgotPassword,
+        resetPassword,
         logout,
         switchHousehold,
         refreshHousehold,

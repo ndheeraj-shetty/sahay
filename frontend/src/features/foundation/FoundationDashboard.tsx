@@ -18,6 +18,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { systemService } from '../../services/api';
+import { AboutFeatureButton } from '../../components/common/AboutFeatureButton';
 
 export const FoundationDashboard: React.FC = () => {
   const [manualPingResult, setManualPingResult] = useState<string | null>(null);
@@ -53,49 +54,49 @@ export const FoundationDashboard: React.FC = () => {
   const modules = [
     {
       title: 'Family Vault',
-      phase: 'Phase 3',
+      tag: 'Encrypted Storage',
       icon: FolderArchive,
       desc: "Secure family document repository with client-side encryption and granular member permissions.",
       color: 'blue',
     },
     {
       title: 'Document Doctor',
-      phase: 'Phase 3',
+      tag: 'Encrypted Storage',
       icon: FileSearch,
       desc: 'OCR & LLM extraction engine for bills, EMIs, and policy renewals.',
       color: 'indigo',
     },
     {
       title: 'Sahay Daily',
-      phase: 'Phase 4',
+      tag: 'Timeline & Radar',
       icon: CalendarCheck2,
       desc: 'Unified timeline for household responsibilities with Today, Calendar, and Money views.',
       color: 'emerald',
     },
     {
       title: 'Health Shield',
-      phase: 'Phase 5',
+      tag: 'Medical Vitals',
       icon: HeartPulse,
       desc: 'Family medical history, prescriptions, medicine refills, and 1-tap Emergency Mode.',
       color: 'rose',
     },
     {
       title: 'Lakshya Goal Vaults',
-      phase: 'Phase 6',
+      tag: 'Goals & Emergency',
       icon: Target,
       desc: 'Shared household savings goals with contributor allocation and risk calculations.',
       color: 'amber',
     },
     {
       title: 'Sahay AI Assistant',
-      phase: 'Phase 7',
+      tag: 'Explainable AI',
       icon: Sparkles,
       desc: 'Conversational assistant with permission-aware RAG Q&A and confirmed actions.',
       color: 'purple',
     },
     {
       title: 'Sahay Shield',
-      phase: 'Phase 8',
+      tag: 'Security & Audit',
       icon: ShieldCheck,
       desc: 'Central security layer: audit logs, consent tracking, and envelope encryption.',
       color: 'teal',
@@ -109,7 +110,7 @@ export const FoundationDashboard: React.FC = () => {
         <div className="relative z-10">
           <div className="inline-flex items-center space-x-2 rounded-full bg-white/15 px-3 py-1 text-xs font-medium backdrop-blur">
             <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>Phase 1 — Application Foundation Active</span>
+            <span>Unified Family Operating System • Production Ready</span>
           </div>
           <h1 className="mt-3 text-2xl sm:text-3xl font-bold tracking-tight">
             SAHAY: The Household Life-Admin OS
@@ -118,6 +119,107 @@ export const FoundationDashboard: React.FC = () => {
             One trusted, permission-controlled system for Indian families to manage documents,
             bills, health records, savings goals, and everyday obligations.
           </p>
+          <div className="mt-4 flex items-center space-x-3">
+            <AboutFeatureButton featureKey="foundation" variant="box" />
+          </div>
+        </div>
+      </div>
+
+      {/* About SAHAY: Comprehensive Project Explanation */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+          <div>
+            <div className="flex items-center space-x-2">
+              <h2 className="text-lg font-bold text-slate-900">About SAHAY Life-Admin OS</h2>
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                Hackathon Innovation
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              How SAHAY replaces fragmented family apps with an intelligent, predictive, and explainable household command center
+            </p>
+          </div>
+          <AboutFeatureButton featureKey="foundation" />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-1.5">
+            <div className="text-xs font-bold text-slate-900 flex items-center space-x-1.5">
+              <span className="w-2 h-2 rounded-full bg-rose-500" />
+              <span>The Problem in Indian Families</span>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Household admin is chaotic. Insurance policies expire unnoticed, medical vitals are scattered in WhatsApp chats, bills arrive through disjointed portals, and when a ₹5L emergency hits, families have no structured liquidation plan.
+            </p>
+          </div>
+
+          <div className="p-4 bg-indigo-50/50 border border-indigo-100 rounded-2xl space-y-1.5">
+            <div className="text-xs font-bold text-indigo-900 flex items-center space-x-1.5">
+              <span className="w-2 h-2 rounded-full bg-indigo-500" />
+              <span>The Unified Solution</span>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              SAHAY centralizes all documents, health vitals, daily obligations, and savings goals into one role-governed OS. It turns passive files into active household timelines with predictive life-event alerts.
+            </p>
+          </div>
+
+          <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl space-y-1.5">
+            <div className="text-xs font-bold text-emerald-900 flex items-center space-x-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span>Zero-Knowledge Security</span>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Built on client-side encryption, granular consent grants, and an immutable audit trail (SAHAY Shield). Data remains completely private, role-compartmentalized, and verifiable without hallucination.
+            </p>
+          </div>
+        </div>
+
+        {/* 5 Core Feature Innovations Grid */}
+        <div className="pt-2">
+          <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">
+            Core High-Impact Innovations Built Into SAHAY
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="p-3 bg-white border border-slate-200 rounded-xl hover:border-indigo-300 transition-colors">
+              <div className="text-xs font-bold text-indigo-950 mb-1">1. Document Doctor</div>
+              <div className="text-[10px] font-bold text-indigo-600 mb-1">"What Changed?"</div>
+              <p className="text-[11px] text-slate-500">
+                OCR + semantic diff comparing baseline & renewed policies to highlight premium hikes and coverage shifts.
+              </p>
+            </div>
+
+            <div className="p-3 bg-white border border-slate-200 rounded-xl hover:border-indigo-300 transition-colors">
+              <div className="text-xs font-bold text-indigo-950 mb-1">2. Life-Event Radar</div>
+              <div className="text-[10px] font-bold text-sky-600 mb-1">Predictive Timeline</div>
+              <p className="text-[11px] text-slate-500">
+                Connects policies, bills, and vehicle renewals into a chronological radar with 1-click renewal task creation.
+              </p>
+            </div>
+
+            <div className="p-3 bg-white border border-slate-200 rounded-xl hover:border-indigo-300 transition-colors">
+              <div className="text-xs font-bold text-indigo-950 mb-1">3. Responsibility Intel</div>
+              <div className="text-[10px] font-bold text-amber-600 mb-1">Workload Balancing</div>
+              <p className="text-[11px] text-slate-500">
+                Maps obligations to responsible family members with bottleneck detection and 1-click transfer delegation.
+              </p>
+            </div>
+
+            <div className="p-3 bg-white border border-slate-200 rounded-xl hover:border-indigo-300 transition-colors">
+              <div className="text-xs font-bold text-indigo-950 mb-1">4. Explainable AI</div>
+              <div className="text-[10px] font-bold text-purple-600 mb-1">Exact Page Citations</div>
+              <p className="text-[11px] text-slate-500">
+                Grounds every answer in document source files, page numbers, and highlighted evidence quotes with 0 hallucination.
+              </p>
+            </div>
+
+            <div className="p-3 bg-white border border-slate-200 rounded-xl hover:border-indigo-300 transition-colors">
+              <div className="text-xs font-bold text-indigo-950 mb-1">5. Emergency Mode</div>
+              <div className="text-[10px] font-bold text-rose-600 mb-1">Crisis Reallocation</div>
+              <p className="text-[11px] text-slate-500">
+                Mobilizes non-critical savings (car, vacation) for pandemic crises with post-emergency restoration schedules.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -290,7 +392,7 @@ export const FoundationDashboard: React.FC = () => {
                       <Icon className="h-5 w-5" />
                     </span>
                     <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700">
-                      {m.phase}
+                      {m.tag || 'Active Module'}
                     </span>
                   </div>
                   <h3 className="mt-3.5 font-bold text-gray-900">{m.title}</h3>

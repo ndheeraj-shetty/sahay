@@ -13,10 +13,15 @@ class ChatQueryRequest(BaseModel):
 
 
 class AICitation(BaseModel):
-    source_type: str  # document, obligation, health, goal
+    source_type: str  # document, obligation, health, goal, money_profile
     source_id: str
     title: str
     snippet: str
+    file_name: Optional[str] = None
+    page_number: Optional[int] = 1
+    evidence: Optional[str] = None
+    confidence_score: Optional[float] = 0.95
+    verified_by_user: bool = False
 
 
 class AIActionResponse(BaseModel):

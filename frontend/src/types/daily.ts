@@ -150,3 +150,80 @@ export interface UpdateMoneyProfilePayload {
   other_expenses?: number;
   notes?: string;
 }
+
+export interface LifeEventItem {
+  id: string;
+  title: string;
+  event_type: 'document_expiry' | 'obligation_due' | 'medicine_refill' | 'tax_deadline' | string;
+  category: string;
+  target_date: string;
+  days_remaining: number;
+  time_horizon: 'urgent' | 'this_month' | 'upcoming' | 'future';
+  estimated_amount?: number | null;
+  source_document_id?: string | null;
+  source_document_title?: string | null;
+  assigned_member_id?: string | null;
+  assigned_member_name?: string | null;
+  has_active_obligation: boolean;
+  suggested_action?: string | null;
+  is_overdue: boolean;
+}
+
+export interface LifeEventTimelineBucket {
+  horizon_key: 'urgent' | 'this_month' | 'upcoming' | 'future';
+  horizon_label: string;
+  total_outflow: number;
+  events: LifeEventItem[];
+}
+
+export interface HouseholdRadarResponse {
+  total_upcoming_events: number;
+  next_90_days_outflow: number;
+  peak_outflow_month: string;
+  radar_summary: string;
+  predictive_alerts: string[];
+  timeline: LifeEventTimelineBucket[];
+}
+
+export interface TransferSuggestion {
+  obligation_id: string;
+  obligation_title: string;
+  amount: number;
+  due_date: string;
+  days_remaining: number;
+  current_member_id?: string | null;
+  current_member_name: string;
+  suggested_member_id: string;
+  suggested_member_name: string;
+  reason: string;
+  urgency: 'high' | 'medium' | 'low';
+}
+
+export interface MemberWorkload {
+  member_id: string;
+  member_name: string;
+  relationship?: string | null;
+  role: string;
+  total_obligations: number;
+  pending_obligations: number;
+  overdue_obligations: number;
+  completed_obligations: number;
+  total_managed_amount: number;
+  obligations: Obligation[];
+}
+
+export interface FamilyResponsibilityIntelligenceResponse {
+  total_obligations: number;
+  unassigned_count: number;
+  overdue_count: number;
+  workload_imbalance_detected: boolean;
+  intelligence_summary: string;
+  member_workloads: MemberWorkload[];
+  unassigned_obligations: Obligation[];
+  transfer_suggestions: TransferSuggestion[];
+}
+
+export interface TransferObligationPayload {
+  target_member_id: string;
+  reason?: string;
+}

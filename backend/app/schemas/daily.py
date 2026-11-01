@@ -148,3 +148,78 @@ class UpdateMoneyProfileRequest(BaseModel):
     utilities_expense: Optional[float] = Field(None, ge=0.0)
     other_expenses: Optional[float] = Field(None, ge=0.0)
     notes: Optional[str] = None
+
+class LifeEventItem(BaseModel):
+    id: str
+    title: str
+    event_type: str  # "document_expiry", "obligation_due", "medicine_refill", "tax_deadline"
+    category: str
+    target_date: str
+    days_remaining: int
+    time_horizon: str  # "urgent", "this_month", "upcoming", "future"
+    estimated_amount: Optional[float] = None
+    source_document_id: Optional[str] = None
+    source_document_title: Optional[str] = None
+    assigned_member_id: Optional[str] = None
+    assigned_member_name: Optional[str] = None
+    has_active_obligation: bool = False
+    suggested_action: Optional[str] = None
+    is_overdue: bool = False
+
+
+class LifeEventTimelineBucket(BaseModel):
+    horizon_key: str  # "urgent", "this_month", "upcoming", "future"
+    horizon_label: str
+    total_outflow: float
+    events: List[LifeEventItem] = []
+
+
+class HouseholdRadarResponse(BaseModel):
+    total_upcoming_events: int
+    next_90_days_outflow: float
+    peak_outflow_month: str
+    radar_summary: str
+    predictive_alerts: List[str]
+    timeline: List[LifeEventTimelineBucket]
+
+class TransferSuggestion(BaseModel):
+    obligation_id: str
+    obligation_title: str
+    amount: float
+    due_date: str
+    days_remaining: int
+    current_member_id: Optional[str] = None
+    current_member_name: str
+    suggested_member_id: str
+    suggested_member_name: str
+    reason: str
+    urgency: str  # "high", "medium", "low"
+
+
+class MemberWorkload(BaseModel):
+    member_id: str
+    member_name: str
+    relationship: Optional[str] = None
+    role: str
+    total_obligations: int
+    pending_obligations: int
+    overdue_obligations: int
+    completed_obligations: int
+    total_managed_amount: float
+    obligations: List[ObligationResponse] = []
+
+
+class FamilyResponsibilityIntelligenceResponse(BaseModel):
+    total_obligations: int
+    unassigned_count: int
+    overdue_count: int
+    workload_imbalance_detected: bool
+    intelligence_summary: str
+    member_workloads: List[MemberWorkload]
+    unassigned_obligations: List[ObligationResponse]
+    transfer_suggestions: List[TransferSuggestion]
+
+
+class TransferObligationRequest(BaseModel):
+    target_member_id: str
+    reason: Optional[str] = None

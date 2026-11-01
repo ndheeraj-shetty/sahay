@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { AboutFeatureButton } from '../../components/common/AboutFeatureButton';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   FileSearch,
@@ -16,6 +17,8 @@ import { doctorService } from '../../services/doctorService';
 import { vaultService } from '../../services/vaultService';
 import { useAuth } from '../../context/AuthContext';
 import { DocumentVerificationModal } from '../vault/DocumentVerificationModal';
+import { DocumentCompareModal } from '../vault/DocumentCompareModal';
+import { GitCompare } from 'lucide-react';
 
 export const DocumentDoctorView: React.FC = () => {
   const { user, activeHousehold } = useAuth();
@@ -23,6 +26,7 @@ export const DocumentDoctorView: React.FC = () => {
     'Your EMI of Rs. 18,500 for loan HL-88213 has been debited from A/c XX4912 on 05-Nov-2026.'
   );
   const [verifyingDocId, setVerifyingDocId] = useState<string | null>(null);
+  const [isCompareOpen, setIsCompareOpen] = useState(false);
 
   const { data: documents } = useQuery({
     queryKey: ['documents', activeHousehold?.id],
@@ -68,6 +72,17 @@ export const DocumentDoctorView: React.FC = () => {
               Reads documents & financial alerts, extracts obligations, and verifies information with zero guesswork
             </p>
           </div>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <AboutFeatureButton featureKey="doctor" />
+          <button
+            onClick={() => setIsCompareOpen(true)}
+          className="flex items-center space-x-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 transition-colors self-start sm:self-auto"
+        >
+          <GitCompare className="h-4 w-4" />
+          <span>⚡ What Changed? (Compare)</span>
+          </button>
         </div>
       </div>
 
@@ -242,6 +257,12 @@ export const DocumentDoctorView: React.FC = () => {
           onVerified={() => {}}
         />
       )}
+
+      {/* Document Change Intelligence - What Changed Modal */}
+      <DocumentCompareModal
+        isOpen={isCompareOpen}
+        onClose={() => setIsCompareOpen(false)}
+      />
     </div>
   );
 };

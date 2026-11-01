@@ -35,7 +35,12 @@ from app.schemas.daily import (
     SnoozeRequest,
     TodayViewResponse,
     UpdateMoneyProfileRequest,
+    HouseholdRadarResponse,
+    FamilyResponsibilityIntelligenceResponse,
+    TransferObligationRequest,
 )
+from app.services.radar_service import HouseholdRadarEngine
+from app.services.responsibility_service import FamilyResponsibilityEngine
 
 router = APIRouter()
 
@@ -682,3 +687,97 @@ async def update_money_profile(
         "other_expenses": profile.other_expenses,
         "total_living_expenses": profile.rent_expense + profile.groceries_expense + profile.utilities_expense + profile.other_expenses,
     }
+
+
+@router.get("/radar", response_model=HouseholdRadarResponse)
+async def get_household_radar(
+    current_user: User = Depends(get_current_user),
+    household: Household = Depends(get_current_household),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Household Life-Event Radar:
+    Cross-document predictive timeline connecting upcoming deadlines
+    (insurance expiries, vehicle renewals, school fees, utilities) into an actionable household timeline.
+    """
+    return await HouseholdRadarEngine.build_radar(household.id, db)
+
+
+@router.post("/radar/create-obligation", response_model=ObligationResponse, status_code=status.HTTP_201_CREATED)
+async def create_obligation_from_radar(
+    data: ObligationCreate,
+    current_user: User = Depends(get_current_user),
+    household: Household = Depends(get_current_household),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Creates an active Obligation and renewal reminder directly from a Life-Event Radar item.
+    """
+    new_ob = Obligation(
+        id=str(uuid.uuid4()),
+        household_id=household.id,
+        created_by_user_id=current_user.id,
+        assigned_member_id=data.assigned_member_id,
+        source_document_id=data.source_document_id,
+        title=data.title,
+        obligation_type=data.obligation_type,
+        category=data.category,
+        biller_or_payee=data.biller_or_payee or data.title,
+        account_or_consumer_no=data.account_or_consumer_no,
+        amount=data.amount,
+        currency=data.currency or "INR",
+        due_date=data.due_date,
+        priority=data.priority,
+        status=ObligationStatus.PENDING,
+        recurrence=data.recurrence,
+        notes=data.notes or "Created from Household Life-Event Radar",
+    )
+    db.add(new_ob)
+    await db.commit()
+    await db.refresh(new_ob)
+
+    res = await db.execute(
+        select(Obligation)
+        .options(selectinload(Obligation.assigned_member))
+        .where(Obligation.id == new_ob.id)
+    )
+    loaded_ob = res.scalar_one()
+    return serialize_obligation(loaded_ob)
+
+
+@router.get("/responsibility-intelligence", response_model=FamilyResponsibilityIntelligenceResponse)
+async def get_family_responsibility_intelligence(
+    current_user: User = Depends(get_current_user),
+    household: Household = Depends(get_current_household),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Family Responsibility Intelligence:
+    Maps household obligations to responsible family members,
+    detects unassigned obligations and bottlenecks, and suggests intelligent responsibility transfers.
+    """
+    return await FamilyResponsibilityEngine.analyze_responsibilities(household.id, db)
+
+
+@router.post("/obligations/{obligation_id}/transfer", response_model=ObligationResponse)
+async def transfer_obligation_responsibility(
+    obligation_id: str,
+    payload: TransferObligationRequest,
+    current_user: User = Depends(get_current_user),
+    household: Household = Depends(get_current_household),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Transfers responsibility of an obligation to another authorized family member with audit tracking.
+    """
+    try:
+        return await FamilyResponsibilityEngine.transfer_responsibility(
+            obligation_id=obligation_id,
+            target_member_id=payload.target_member_id,
+            household_id=household.id,
+            current_user_id=current_user.id,
+            reason=payload.reason,
+            db=db,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

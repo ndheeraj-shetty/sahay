@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { AboutFeatureButton } from '../../components/common/AboutFeatureButton';
 import {
   Target,
   PiggyBank,
@@ -10,6 +11,7 @@ import {
   Calendar,
   IndianRupee,
   Shield,
+  ShieldAlert,
   GraduationCap,
   Home,
   Plane,
@@ -30,6 +32,7 @@ import {
 import { CreateGoalModal } from './CreateGoalModal';
 import { GoalDetailModal } from './GoalDetailModal';
 import { AddContributionModal } from './AddContributionModal';
+import { EmergencyModeModal } from './EmergencyModeModal';
 import { dailyService } from '../../services/dailyService';
 import { MoneyProfileModal } from '../daily/MoneyProfileModal';
 import { MoneyViewData, UpdateMoneyProfilePayload } from '../../types/daily';
@@ -49,6 +52,7 @@ export const LakshyaDashboardView: React.FC = () => {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isMoneyProfileOpen, setIsMoneyProfileOpen] = useState(false);
   const [activeDepositGoal, setActiveDepositGoal] = useState<GoalDetail | null>(null);
+  const [isEmergencyModeOpen, setIsEmergencyModeOpen] = useState(false);
 
   const loadData = async () => {
     try {
@@ -215,6 +219,17 @@ export const LakshyaDashboardView: React.FC = () => {
             title="Refresh Goals"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+          </button>
+
+          <AboutFeatureButton featureKey="lakshya" />
+
+          <button
+            onClick={() => setIsEmergencyModeOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold shadow-xs transition-colors"
+            title="Crisis & Pandemic Emergency Liquidity Mode"
+          >
+            <ShieldAlert className="w-4 h-4 text-rose-600" />
+            <span>🚨 Emergency Mode</span>
           </button>
 
           <button
@@ -506,6 +521,11 @@ export const LakshyaDashboardView: React.FC = () => {
         currentIncome={moneyData?.expected_income || 85000}
         currentSavings={moneyData?.planned_savings || 15000}
         onSave={handleSaveMoneyProfile}
+      />
+          <EmergencyModeModal
+        isOpen={isEmergencyModeOpen}
+        onClose={() => setIsEmergencyModeOpen(false)}
+        onGoalsUpdated={loadData}
       />
     </div>
   );

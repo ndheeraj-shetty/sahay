@@ -12,6 +12,8 @@ export const authService = {
     full_name: string;
     phone?: string;
     household_name?: string;
+    invite_code?: string;
+    is_owner?: boolean;
   }): Promise<TokenResponse> => {
     const { data } = await apiClient.post<TokenResponse>('/auth/register', payload);
     return data;
@@ -61,5 +63,19 @@ export const authService = {
 
   revokeAllOtherSessions: async (): Promise<void> => {
     await apiClient.delete('/auth/sessions');
+  },
+
+  forgotPassword: async (email: string): Promise<{ message: string; demo_reset_code?: string }> => {
+    const { data } = await apiClient.post('/auth/forgot-password', { email });
+    return data;
+  },
+
+  resetPassword: async (payload: {
+    email: string;
+    reset_code: string;
+    new_password: string;
+  }): Promise<{ message: string }> => {
+    const { data } = await apiClient.post('/auth/reset-password', payload);
+    return data;
   },
 };

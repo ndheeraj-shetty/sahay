@@ -17,6 +17,7 @@ from app.db.base import Base, TimestampMixin
 
 
 class ActionType(str, enum.Enum):
+    CREATE_GOAL = "create_goal"
     CREATE_OBLIGATION = "create_obligation"
     MARK_PAID = "mark_paid"
     ADD_GOAL_CONTRIBUTION = "add_goal_contribution"

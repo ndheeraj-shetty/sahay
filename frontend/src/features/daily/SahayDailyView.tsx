@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { AboutFeatureButton } from '../../components/common/AboutFeatureButton';
 import {
   Calendar as CalendarIcon,
   CheckCircle2,
@@ -19,6 +20,8 @@ import {
   Zap,
   Sparkles,
   ShieldCheck,
+  Compass,
+  Users,
 } from 'lucide-react';
 import { dailyService } from '../../services/dailyService';
 import {
@@ -36,8 +39,10 @@ import { AddObligationModal } from './AddObligationModal';
 import { MarkPaidModal } from './MarkPaidModal';
 import { SnoozeModal } from './SnoozeModal';
 import { MoneyProfileModal } from './MoneyProfileModal';
+import { HouseholdRadarView } from './HouseholdRadarView';
+import { FamilyResponsibilityView } from './FamilyResponsibilityView';
 
-type DailyTab = 'today' | 'calendar' | 'money';
+type DailyTab = 'today' | 'calendar' | 'money' | 'radar' | 'responsibility';
 
 export const SahayDailyView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<DailyTab>('today');
@@ -181,6 +186,8 @@ export const SahayDailyView: React.FC = () => {
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
 
+          <AboutFeatureButton featureKey="daily" />
+
           <button
             onClick={() => setIsMoneyProfileOpen(true)}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 transition-colors shadow-sm"
@@ -240,6 +247,36 @@ export const SahayDailyView: React.FC = () => {
         >
           <IndianRupee className="w-4 h-4" />
           <span>Money View</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('radar')}
+          className={`flex items-center gap-2 py-4 px-4 text-sm font-semibold border-b-2 transition-colors ${
+            activeTab === 'radar'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          <Compass className="w-4 h-4 text-indigo-600" />
+          <span>Life-Event Radar</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700 uppercase tracking-wide">
+            Predictive
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('responsibility')}
+          className={`flex items-center gap-2 py-4 px-4 text-sm font-semibold border-b-2 transition-colors ${
+            activeTab === 'responsibility'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          <Users className="w-4 h-4 text-indigo-600" />
+          <span>Family Responsibility</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700 uppercase tracking-wide">
+            Delegation
+          </span>
         </button>
       </div>
 
@@ -874,6 +911,16 @@ export const SahayDailyView: React.FC = () => {
             </div>
           )}
         </div>
+      )}
+
+      {/* TAB CONTENT: RADAR VIEW */}
+      {activeTab === 'radar' && (
+        <HouseholdRadarView />
+      )}
+
+      {/* TAB CONTENT: RESPONSIBILITY VIEW */}
+      {activeTab === 'responsibility' && (
+        <FamilyResponsibilityView />
       )}
 
       {/* Modals */}

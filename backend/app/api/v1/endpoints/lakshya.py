@@ -14,6 +14,7 @@ from app.api.deps import (
 from app.db.session import get_db
 from app.models.auth import Household, HouseholdMember, User
 from app.models.daily import (
+    HouseholdMoneyProfile,
     Obligation,
     ObligationPriority,
     ObligationStatus,
@@ -44,6 +45,10 @@ from app.schemas.lakshya import (
     GoalWithdrawalResponse,
     LakshyaOverviewResponse,
     WithdrawalCreate,
+    GoalEmergencyReallocationItem,
+    EmergencyModeReallocationRequest,
+    EmergencyModeReallocationResponse,
+    EmergencyModeApplyRequest,
 )
 
 router = APIRouter()
@@ -693,3 +698,174 @@ async def get_goal_risk_endpoint(
     if not goal:
         raise HTTPException(status_code=404, detail="Goal vault not found.")
     return compute_goal_risk(goal)
+
+
+# -------------------------------------------------------------
+# 7. EMERGENCY MODE: CRISIS LIQUIDITY & GOAL REALLOCATION
+# -------------------------------------------------------------
+@router.post("/emergency-mode/reallocate", response_model=EmergencyModeReallocationResponse)
+async def plan_emergency_mode_reallocation(
+    data: EmergencyModeReallocationRequest,
+    household: Household = Depends(get_current_household),
+    db: AsyncSession = Depends(get_db),
+):
+    urgent_amt = float(data.urgent_amount)
+
+    # 1. Fetch Household Money Profile for liquid monthly cash
+    res_mp = await db.execute(
+        select(HouseholdMoneyProfile).where(HouseholdMoneyProfile.household_id == household.id)
+    )
+    mp = res_mp.scalar_one_or_none()
+
+    inc = mp.expected_monthly_income if mp else 85000.0
+    rent = mp.rent_expense if (mp and mp.rent_expense is not None) else 18000.0
+    groc = mp.groceries_expense if (mp and mp.groceries_expense is not None) else 12000.0
+    util = mp.utilities_expense if (mp and mp.utilities_expense is not None) else 5000.0
+    oth = mp.other_expenses if (mp and mp.other_expenses is not None) else 5000.0
+    living = rent + groc + util + oth
+
+    res_ob = await db.execute(
+        select(Obligation).where(
+            Obligation.household_id == household.id,
+            Obligation.status.in_([ObligationStatus.PENDING, ObligationStatus.DUE_TODAY]),
+        )
+    )
+    obs = res_ob.scalars().all()
+    pending_bills = sum(float(o.amount) for o in obs)
+
+    available_liquid = max(0.0, round(inc - (living + pending_bills), 2))
+    deficit = max(0.0, round(urgent_amt - available_liquid, 2))
+
+    # 2. Fetch all active goals with saved money
+    res_goals = await db.execute(
+        select(GoalVault)
+        .options(selectinload(GoalVault.contributors))
+        .where(
+            GoalVault.household_id == household.id,
+            GoalVault.status.in_([GoalStatus.ACTIVE, GoalStatus.ON_TRACK, GoalStatus.BEHIND, GoalStatus.AT_RISK]),
+        )
+    )
+    goals = res_goals.scalars().all()
+
+    def goal_liquidation_tier(category: GoalCategory) -> int:
+        c = category.value
+        if c in ["travel_vacation", "vehicle_purchase", "home_renovation", "custom"]:
+            return 1
+        elif c in ["home_down_payment", "wedding", "retirement"]:
+            return 2
+        else:
+            return 3
+
+    sorted_goals = sorted(goals, key=lambda g: (goal_liquidation_tier(g.category), -g.current_amount))
+
+    reallocations: List[GoalEmergencyReallocationItem] = []
+    remaining_deficit = deficit
+    total_mobilized = 0.0
+
+    narrative_parts = []
+    restoration_steps = []
+
+    for g in sorted_goals:
+        curr_saved = float(g.current_amount)
+        if curr_saved <= 0.0 or remaining_deficit <= 0.0:
+            continue
+
+        tier = goal_liquidation_tier(g.category)
+        tier_label = "Discretionary (Safe to withdraw)" if tier == 1 else ("Secondary Goal" if tier == 2 else "Essential Goal")
+
+        take_amount = min(curr_saved, remaining_deficit)
+        take_amount = round(take_amount, 2)
+        rem_saved = round(curr_saved - take_amount, 2)
+
+        restore_months = 12 if take_amount > 50000 else 6
+        restore_monthly = round(take_amount / restore_months, 2)
+
+        reallocations.append(
+            GoalEmergencyReallocationItem(
+                goal_id=g.id,
+                goal_title=g.title,
+                category=g.category.value,
+                current_saved=curr_saved,
+                recommended_withdrawal=take_amount,
+                remaining_saved=rem_saved,
+                priority_level=tier_label,
+                restoration_monthly=restore_monthly,
+                restoration_months=restore_months,
+            )
+        )
+
+        narrative_parts.append(
+            f"You have saved ₹{curr_saved:,.0f} for '{g.title}' right? Take ₹{take_amount:,.0f} from it."
+        )
+        restoration_steps.append(
+            f"Restore '{g.title}': deposit ₹{restore_monthly:,.0f}/month for {restore_months} months once cash flow stabilizes."
+        )
+
+        total_mobilized += take_amount
+        remaining_deficit = round(remaining_deficit - take_amount, 2)
+
+    shortfall = max(0.0, remaining_deficit)
+
+    if narrative_parts:
+        advice_narrative = (
+            f"Emergency Mode Activated: You urgently require ₹{urgent_amt:,.0f}. "
+            + " ".join(narrative_parts)
+            + f" This mobilizes ₹{total_mobilized:,.0f} from your existing goals to handle the crisis without costly high-interest borrowing. "
+            + "Once you get the money or the emergency passes, keep the money back following your restoration schedule."
+        )
+    else:
+        advice_narrative = (
+            f"Emergency Mode Activated: You urgently require ₹{urgent_amt:,.0f}. "
+            f"Your current liquid surplus is ₹{available_liquid:,.0f}. "
+            "You do not currently have sufficient savings in your goals to reallocate. "
+            "Consider utilizing emergency insurance claims or family support."
+        )
+
+    return EmergencyModeReallocationResponse(
+        urgent_amount=urgent_amt,
+        available_liquid_cash=available_liquid,
+        deficit=deficit,
+        total_mobilized_from_goals=total_mobilized,
+        shortfall_remaining=shortfall,
+        reallocations=reallocations,
+        advice_narrative=advice_narrative,
+        restoration_plan=restoration_steps,
+    )
+
+
+@router.post("/emergency-mode/apply")
+async def apply_emergency_mode_reallocation(
+    data: EmergencyModeApplyRequest,
+    household: Household = Depends(get_current_household),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    applied = []
+    for item in data.withdrawals:
+        gid = item.get("goal_id")
+        amt = float(item.get("amount", 0.0))
+        if not gid or amt <= 0.0:
+            continue
+        res = await db.execute(
+            select(GoalVault).where(GoalVault.id == gid, GoalVault.household_id == household.id)
+        )
+        goal = res.scalar_one_or_none()
+        if not goal:
+            continue
+
+        w = GoalWithdrawal(
+            id=str(uuid.uuid4()),
+            goal_id=goal.id,
+            authorized_by_user_id=current_user.id,
+            amount=amt,
+            withdrawal_date=date.today(),
+            reason=f"Emergency Mode: {data.reason}",
+            notes=f"Auto-withdrawn via SAHAY Crisis Liquidity Mode for {data.reason}",
+        )
+        db.add(w)
+        goal.current_amount = max(0.0, round(goal.current_amount - amt, 2))
+        db.add(goal)
+        applied.append({"goal_id": goal.id, "title": goal.title, "amount": amt})
+
+    await db.commit()
+    return {"message": "Emergency reallocation applied successfully", "applied_withdrawals": applied}

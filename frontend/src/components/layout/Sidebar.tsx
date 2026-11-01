@@ -21,15 +21,14 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { name: 'Overview & Foundation', path: '/', icon: Layers, badge: 'Phase 1' },
-  { name: 'Household & Family', path: '/household', icon: Users, badge: 'Phase 2' },
+  { name: 'Overview & Foundation', path: '/', icon: Layers, tag: 'Vision & Architecture' },
+  { name: 'Household & Family', path: '/household', icon: Users, tag: 'Members & Roles' },
   { name: 'Sahay Daily', path: '/daily', icon: CalendarCheck2, tag: 'Timeline & Money' },
   { name: 'Family Vault', path: '/vault', icon: FolderArchive, tag: 'Documents' },
   { name: 'Document Doctor', path: '/document-doctor', icon: FileSearch, tag: 'AI Extraction' },
   { name: 'Health Shield', path: '/health', icon: HeartPulse, tag: 'Medical & Rx' },
   { name: 'Lakshya Goal Vaults', path: '/lakshya', icon: Target, tag: 'Family Savings' },
   { name: 'Sahay AI Assistant', path: '/assistant', icon: Sparkles, tag: 'Household Q&A' },
-  { name: 'Sahay Shield', path: '/shield', icon: ShieldCheck, tag: 'Security & Audit' },
 ];
 
 export const Sidebar: React.FC = () => {
@@ -84,11 +83,16 @@ export const Sidebar: React.FC = () => {
         })}
       </nav>
 
-      {/* Bottom information */}
-      <div className="border-t border-gray-100 p-4">
-        <div className="rounded-xl bg-gray-50 p-3 text-xs text-gray-500 border border-gray-200">
-          <p className="font-semibold text-gray-800">SAHAY v1.0.0</p>
-          <p className="mt-0.5 text-[11px]">Private Household OS • Seven Connected Modules</p>
+      {/* Bottom information - Protected by SAHAY Shield */}
+      <div className="border-t border-gray-100 p-3.5">
+        <div className="rounded-xl bg-slate-50 border border-slate-200 p-2.5 shadow-2xs">
+          <div className="flex items-center space-x-1.5 text-xs text-slate-800 font-semibold">
+            <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>Protected by SAHAY Shield</span>
+          </div>
+          <p className="mt-1 text-[10px] text-slate-500 leading-tight">
+            Client-side encrypted • Zero-knowledge family isolation
+          </p>
         </div>
       </div>
     </aside>

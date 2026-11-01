@@ -12,6 +12,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import httpx
 from PIL import Image
 from pypdf import PdfReader
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.crypto import decrypt_file_bytes
@@ -871,4 +873,232 @@ class DocumentDoctorEngine:
             "raw_text": text,
             "detected_at": datetime.now(timezone.utc).isoformat(),
             "suggest_recurring": "emi" in lower or "bill" in lower,
+        }
+
+    @classmethod
+    async def compare_documents(
+        cls,
+        baseline_doc_id: str,
+        updated_doc_id: str,
+        household_id: str,
+        db: AsyncSession,
+    ) -> Dict[str, Any]:
+        """
+        Document Change Intelligence - "What Changed?"
+        Compares baseline and updated document versions (e.g. last year's vs this year's policy,
+        or previous vs current utility bill / agreement).
+        Detects financial deltas, coverage shifts, expiry revisions, and generates AI explanations.
+        """
+        from app.models.vault import Document
+        from app.models.doctor import ExtractedDocumentField, DocumentProcessingJob
+        from app.core.config import settings
+        import httpx
+
+        # 1. Fetch documents
+        b_res = await db.execute(
+            select(Document).where(Document.id == baseline_doc_id, Document.household_id == household_id)
+        )
+        baseline_doc = b_res.scalar_one_or_none()
+        if not baseline_doc:
+            raise ValueError("Baseline document not found or access denied")
+
+        u_res = await db.execute(
+            select(Document).where(Document.id == updated_doc_id, Document.household_id == household_id)
+        )
+        updated_doc = u_res.scalar_one_or_none()
+        if not updated_doc:
+            raise ValueError("Updated document not found or access denied")
+
+        # 2. Fetch extracted fields
+        b_fields_res = await db.execute(
+            select(ExtractedDocumentField).where(ExtractedDocumentField.document_id == baseline_doc_id)
+        )
+        baseline_fields = b_fields_res.scalars().all()
+
+        u_fields_res = await db.execute(
+            select(ExtractedDocumentField).where(ExtractedDocumentField.document_id == updated_doc_id)
+        )
+        updated_fields = u_fields_res.scalars().all()
+
+        # 3. Fetch OCR texts if available
+        b_job_res = await db.execute(
+            select(DocumentProcessingJob).where(DocumentProcessingJob.document_id == baseline_doc_id)
+        )
+        b_job = b_job_res.scalars().first()
+        b_ocr = b_job.ocr_text if b_job and b_job.ocr_text else ""
+
+        u_job_res = await db.execute(
+            select(DocumentProcessingJob).where(DocumentProcessingJob.document_id == updated_doc_id)
+        )
+        u_job = u_job_res.scalars().first()
+        u_ocr = u_job.ocr_text if u_job and u_job.ocr_text else ""
+
+        b_map = {f.field_name: (f.user_confirmed_value or f.field_value) for f in baseline_fields}
+        u_map = {f.field_name: (f.user_confirmed_value or f.field_value) for f in updated_fields}
+
+        # Merge metadata
+        if baseline_doc.expiry_date and "expiry_date" not in b_map:
+            b_map["expiry_date"] = str(baseline_doc.expiry_date)
+        if updated_doc.expiry_date and "expiry_date" not in u_map:
+            u_map["expiry_date"] = str(updated_doc.expiry_date)
+
+        all_keys = list(dict.fromkeys(list(b_map.keys()) + list(u_map.keys())))
+        field_changes = []
+        key_alerts = []
+
+        for k in all_keys:
+            b_val = b_map.get(k)
+            u_val = u_map.get(k)
+
+            if b_val is not None and u_val is not None:
+                # Check for numerical changes (amounts, premiums, units, coverage)
+                b_num_match = re.search(r"([\d,]+(?:\.\d+)?)", str(b_val))
+                u_num_match = re.search(r"([\d,]+(?:\.\d+)?)", str(u_val))
+
+                if b_num_match and u_num_match and any(w in k.lower() for w in ["amount", "premium", "coverage", "due", "rent", "sum", "rate", "units"]):
+                    try:
+                        b_float = float(b_num_match.group(1).replace(",", ""))
+                        u_float = float(u_num_match.group(1).replace(",", ""))
+                        if u_float > b_float:
+                            diff = u_float - b_float
+                            pct = (diff / b_float * 100) if b_float > 0 else 0
+                            field_changes.append({
+                                "field_name": k,
+                                "baseline_value": str(b_val),
+                                "updated_value": str(u_val),
+                                "change_type": "increased",
+                                "significance": "high",
+                                "impact_summary": f"+₹{diff:,.2f} (+{pct:.1f}%)",
+                            })
+                            key_alerts.append(f"🔴 **{k.replace('_', ' ').title()}** increased by **₹{diff:,.2f}** (+{pct:.1f}%)")
+                        elif u_float < b_float:
+                            diff = b_float - u_float
+                            pct = (diff / b_float * 100) if b_float > 0 else 0
+                            field_changes.append({
+                                "field_name": k,
+                                "baseline_value": str(b_val),
+                                "updated_value": str(u_val),
+                                "change_type": "decreased",
+                                "significance": "high",
+                                "impact_summary": f"-₹{diff:,.2f} (-{pct:.1f}%)",
+                            })
+                            key_alerts.append(f"🟢 **{k.replace('_', ' ').title()}** decreased by **₹{diff:,.2f}** (-{pct:.1f}%)")
+                        else:
+                            field_changes.append({
+                                "field_name": k,
+                                "baseline_value": str(b_val),
+                                "updated_value": str(u_val),
+                                "change_type": "unchanged",
+                                "significance": "low",
+                                "impact_summary": "Unchanged",
+                            })
+                    except Exception:
+                        field_changes.append({
+                            "field_name": k,
+                            "baseline_value": str(b_val),
+                            "updated_value": str(u_val),
+                            "change_type": "modified" if b_val != u_val else "unchanged",
+                            "significance": "medium" if b_val != u_val else "low",
+                            "impact_summary": "Updated" if b_val != u_val else "Unchanged",
+                        })
+                elif b_val != u_val:
+                    field_changes.append({
+                        "field_name": k,
+                        "baseline_value": str(b_val),
+                        "updated_value": str(u_val),
+                        "change_type": "modified",
+                        "significance": "high" if any(w in k.lower() for w in ["date", "expiry", "status", "period"]) else "medium",
+                        "impact_summary": f"Changed from {b_val} to {u_val}",
+                    })
+                    if "expiry" in k.lower() or "due" in k.lower():
+                        key_alerts.append(f"📅 **{k.replace('_', ' ').title()}** updated to **{u_val}**")
+                else:
+                    field_changes.append({
+                        "field_name": k,
+                        "baseline_value": str(b_val),
+                        "updated_value": str(u_val),
+                        "change_type": "unchanged",
+                        "significance": "low",
+                        "impact_summary": "Unchanged",
+                    })
+
+            elif u_val is not None:
+                field_changes.append({
+                    "field_name": k,
+                    "baseline_value": None,
+                    "updated_value": str(u_val),
+                    "change_type": "added",
+                    "significance": "medium",
+                    "impact_summary": f"New parameter added: {u_val}",
+                })
+                key_alerts.append(f"⚡ New field **{k.replace('_', ' ').title()}**: {u_val}")
+            else:
+                field_changes.append({
+                    "field_name": k,
+                    "baseline_value": str(b_val),
+                    "updated_value": None,
+                    "change_type": "removed",
+                    "significance": "low",
+                    "impact_summary": f"Discontinued: {b_val}",
+                })
+
+        # LLM Semantic Explanation
+        ai_explanation = ""
+        if settings.GEMINI_API_KEY:
+            try:
+                model = settings.AI_MODEL or "gemini-3.1-flash-lite"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={settings.GEMINI_API_KEY}"
+                system_instruction = (
+                    "You are the Sahay Document Change Intelligence Engine. Your task is to compare two versions "
+                    "of household documents (e.g. insurance renewals, electricity bills, rental agreements) and explain "
+                    "exactly WHAT CHANGED in clear, empathetic, and actionable plain language for an Indian family. "
+                    "Highlight price increases/decreases, coverage changes, new restrictions/conditions, and validity changes."
+                )
+                prompt = (
+                    f"Baseline Document: '{baseline_doc.title}' ({baseline_doc.document_type})\n"
+                    f"Baseline Extracted Metadata: {json.dumps(b_map)}\n"
+                    f"Baseline Text Snippet: {b_ocr[:600]}\n\n"
+                    f"Updated Document: '{updated_doc.title}' ({updated_doc.document_type})\n"
+                    f"Updated Extracted Metadata: {json.dumps(u_map)}\n"
+                    f"Updated Text Snippet: {u_ocr[:600]}\n\n"
+                    "Please provide a 2-3 paragraph breakdown explaining what changed, highlighting cost impacts, coverage changes, and actionable household advice."
+                )
+                payload = {
+                    "contents": [{"parts": [{"text": f"{system_instruction}\n\n{prompt}"}]}],
+                    "generationConfig": {"temperature": 0.2, "maxOutputTokens": 1024},
+                }
+                with httpx.Client(timeout=3.0) as client:
+                    resp = client.post(url, json=payload)
+                    if resp.status_code == 200:
+                        cand = resp.json().get("candidates", [])
+                        if cand and "parts" in cand[0].get("content", {}):
+                            ai_explanation = cand[0]["content"]["parts"][0].get("text", "").strip()
+            except Exception as e:
+                logger.warning(f"Gemini comparison explanation error: {e}")
+
+        if not ai_explanation:
+            # Fallback structured explanation
+            alert_summary = "\n".join([f"- {a}" for a in key_alerts]) if key_alerts else "- No critical financial or date deviations detected."
+            ai_explanation = (
+                f"### 📋 Document Version Comparison Analysis\n\n"
+                f"SAHAY has compared **{baseline_doc.title}** (Baseline) against **{updated_doc.title}** (Updated).\n\n"
+                f"**Key Deviations Identified:**\n{alert_summary}\n\n"
+                f"**Household Recommendation:**\n"
+                f"Review the updated parameters in the comparison matrix below to ensure all changes align with your expectations and budget."
+            )
+
+        exec_summary = f"Comparison between '{baseline_doc.title}' and '{updated_doc.title}': {len(key_alerts)} key modification(s) identified."
+
+        return {
+            "baseline_document_id": baseline_doc.id,
+            "baseline_title": baseline_doc.title,
+            "baseline_type": baseline_doc.document_type,
+            "updated_document_id": updated_doc.id,
+            "updated_title": updated_doc.title,
+            "updated_type": updated_doc.document_type,
+            "executive_summary": exec_summary,
+            "key_alerts": key_alerts,
+            "field_changes": field_changes,
+            "ai_explanation": ai_explanation,
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }

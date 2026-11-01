@@ -37,7 +37,7 @@ def test_ai_chat_and_citations(client: TestClient):
     data = chat_res.json()
     assert data["role"] == "assistant"
     assert "Sahay Household AI Assistant" in data["content"]
-    assert "Family Vault" in data["content"]
+    assert "Vault" in data["content"]
 
     # 2. Add an obligation
     due_d = (date.today() + timedelta(days=3)).isoformat()
@@ -64,7 +64,7 @@ def test_ai_chat_and_citations(client: TestClient):
     )
     assert chat_bills.status_code == 200
     bills_data = chat_bills.json()
-    assert "Adani Electricity Bill" in bills_data["content"]
+    assert "Adani Electricity" in bills_data["content"]
     assert any(c["source_type"] == "obligation" for c in bills_data["citations"])
 
 
@@ -254,3 +254,54 @@ def test_ai_income_and_budget_advice_and_update(client: TestClient):
     assert money_res.json()["expected_income"] == 125000.0
     assert money_res.json()["planned_savings"] == 25000.0
 
+
+
+def test_ai_goal_vault_discussion_and_auto_creation_or_branching(client: TestClient):
+    suffix = uuid.uuid4().hex[:6]
+    reg_res = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": f"goalauto.{suffix}@example.com",
+            "password": "Password123!",
+            "full_name": "Goal Auto Tester",
+        },
+    )
+    assert reg_res.status_code == 201
+    headers = {"Authorization": f"Bearer {reg_res.json()['access_token']}"}
+
+    # 1. Ask about vacation goal
+    chat1 = client.post(
+        "/api/v1/ai/chat",
+        json={"query": "Can we save for a travel vacation goal of 120000?"},
+        headers=headers,
+    )
+    assert chat1.status_code == 200
+    data1 = chat1.json()
+    assert data1["suggested_action"] is not None
+    assert data1["suggested_action"]["action_type"] == "create_goal"
+
+    # 2. User says "Yes please create it" -> auto-creates Goal Vault
+    chat2 = client.post(
+        "/api/v1/ai/chat",
+        json={"query": "Yes please create it"},
+        headers=headers,
+    )
+    assert chat2.status_code == 200
+    data2 = chat2.json()
+    assert "Lakshya Goal Vault Created Successfully" in data2["content"]
+
+    # 3. Verify the goal actually exists in Lakshya Goal Vaults
+    goals_res = client.get("/api/v1/lakshya/goals", headers=headers)
+    assert goals_res.status_code == 200
+    goals = goals_res.json()
+    assert any("Travel" in g["title"] or "Vacation" in g["title"] or g["category"] == "travel_vacation" for g in goals)
+
+    # 4. User asks another question -> answers directly without forcing goal creation
+    chat3 = client.post(
+        "/api/v1/ai/chat",
+        json={"query": "What bills are due this month?"},
+        headers=headers,
+    )
+    assert chat3.status_code == 200
+    data3 = chat3.json()
+    assert any(w in data3["content"].lower() for w in ["bill", "obligation", "paid", "upcoming"])

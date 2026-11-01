@@ -68,3 +68,26 @@ export interface FinancialEventResponse {
   detected_at: string;
   suggest_recurring: boolean;
 }
+
+export interface CompareFieldChange {
+  field_name: string;
+  baseline_value?: string | null;
+  updated_value?: string | null;
+  change_type: 'increased' | 'decreased' | 'modified' | 'added' | 'removed' | 'unchanged';
+  significance: 'high' | 'medium' | 'low';
+  impact_summary: string;
+}
+
+export interface DocumentCompareResponse {
+  baseline_document_id: string;
+  baseline_title: string;
+  baseline_type: string;
+  updated_document_id: string;
+  updated_title: string;
+  updated_type: string;
+  executive_summary: string;
+  key_alerts: string[];
+  field_changes: CompareFieldChange[];
+  ai_explanation: string;
+  created_at: string;
+}
