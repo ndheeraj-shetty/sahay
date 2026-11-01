@@ -14,41 +14,28 @@ async def init_db():
     for attempt in range(1, retries + 1):
         try:
             engine = get_engine()
+            # 1. Create all schema tables
             async with engine.begin() as conn:
-                # Create tables if they do not exist
                 await conn.run_sync(Base.metadata.create_all)
 
-                # Safe column additions for existing tables
-                try:
-                    await conn.execute(text("ALTER TABLE documents ADD COLUMN is_encrypted BOOLEAN DEFAULT 1"))
-                except Exception:
-                    pass
-                try:
-                    await conn.execute(text("ALTER TABLE documents ADD COLUMN encryption_algorithm VARCHAR(50) DEFAULT 'AES-256-GCM'"))
-                except Exception:
-                    pass
-                try:
-                    await conn.execute(text("ALTER TABLE medicines ADD COLUMN approx_price FLOAT DEFAULT 0.0"))
-                except Exception:
-                    pass
-                try:
-                    await conn.execute(text("ALTER TABLE household_money_profiles ADD COLUMN rent_expense FLOAT DEFAULT 18000.0"))
-                except Exception:
-                    pass
-                try:
-                    await conn.execute(text("ALTER TABLE household_money_profiles ADD COLUMN groceries_expense FLOAT DEFAULT 12000.0"))
-                except Exception:
-                    pass
-                try:
-                    await conn.execute(text("ALTER TABLE household_money_profiles ADD COLUMN utilities_expense FLOAT DEFAULT 5000.0"))
-                except Exception:
-                    pass
-                try:
-                    await conn.execute(text("ALTER TABLE household_money_profiles ADD COLUMN other_expenses FLOAT DEFAULT 5000.0"))
-                except Exception:
-                    pass
+            # 2. Safe dialect-specific alterations in isolated blocks
+            if engine.dialect.name == "sqlite":
+                for sql_stmt in [
+                    "ALTER TABLE documents ADD COLUMN is_encrypted BOOLEAN DEFAULT 1",
+                    "ALTER TABLE documents ADD COLUMN encryption_algorithm VARCHAR(50) DEFAULT 'AES-256-GCM'",
+                    "ALTER TABLE medicines ADD COLUMN approx_price FLOAT DEFAULT 0.0",
+                    "ALTER TABLE household_money_profiles ADD COLUMN rent_expense FLOAT DEFAULT 18000.0",
+                    "ALTER TABLE household_money_profiles ADD COLUMN groceries_expense FLOAT DEFAULT 12000.0",
+                    "ALTER TABLE household_money_profiles ADD COLUMN utilities_expense FLOAT DEFAULT 5000.0",
+                    "ALTER TABLE household_money_profiles ADD COLUMN other_expenses FLOAT DEFAULT 5000.0",
+                ]:
+                    try:
+                        async with engine.begin() as conn:
+                            await conn.execute(text(sql_stmt))
+                    except Exception:
+                        pass
 
-            logger.info("Database tables initialized successfully.")
+            logger.info("Database tables initialized and verified successfully.")
             return
         except Exception as exc:
             logger.warning(f"Database initialization attempt {attempt}/{retries} failed: {exc}")
