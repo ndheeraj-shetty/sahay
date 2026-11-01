@@ -153,8 +153,7 @@ class DocumentDoctorEngine:
                     "parts": [
                         {
                             "text": (
-                                "Extract all text, numbers, biller/issuer names, consumer/account numbers, "
-                                "amounts due, and dates from this document. Return only the extracted text and key fields."
+                                "Extract all readable text, certificate/degree titles, candidate/person names, institution/board names, dates, roll/registration numbers, and key details from this document. Return the full text verbatim."
                             )
                         },
                         {
@@ -226,11 +225,46 @@ class DocumentDoctorEngine:
         lower_hint = (category_hint or "").lower()
         combined = f"{lower_title} {lower_name} {lower_text} {lower_hint}"
 
-        # 1. Electricity Bill
+        # 0. Strict Category Hint Guard (Explicit user categorization must NEVER be overridden)
+        if lower_hint == "education":
+            if any(k in combined for k in ["fee receipt", "tuition fee", "fee payment", "challan", "fee"]):
+                return "education", "fee_receipt", 0.96
+            elif any(k in combined for k in ["marksheet", "grade card", "transcript", "grades", "score card"]):
+                return "education", "marksheet", 0.96
+            elif any(k in combined for k in ["degree", "diploma", "graduation", "convocation", "bachelor", "master", "btech", "b.tech", "be", "b.e", "mtech", "bsc", "b.sc", "bcom", "b.com", "mba", "certificate"]):
+                return "education", "academic_certificate", 0.97
+            else:
+                return "education", "academic_certificate", 0.95
+
+        if lower_hint == "identity":
+            if any(k in combined for k in ["aadhaar", "uidai"]):
+                return "identity", "aadhaar_card", 0.98
+            elif any(k in combined for k in ["pan", "permanent account number"]):
+                return "identity", "pan_card", 0.98
+            elif any(k in combined for k in ["passport"]):
+                return "identity", "passport", 0.96
+            elif any(k in combined for k in ["driving", "licence", "license"]):
+                return "identity", "driving_licence", 0.96
+            elif any(k in combined for k in ["voter", "epic"]):
+                return "identity", "voter_id", 0.96
+            else:
+                return "identity", "identity_card", 0.94
+
+        if lower_hint == "health":
+            if any(k in combined for k in ["prescription", "rx", "tablet", "dosage", "medicine"]):
+                return "health", "prescription", 0.95
+            elif any(k in combined for k in ["lab", "blood", "test", "pathology", "report"]):
+                return "health", "lab_report", 0.95
+            elif any(k in combined for k in ["discharge", "hospital", "summary", "admission"]):
+                return "health", "discharge_summary", 0.95
+            else:
+                return "health", "medical_record", 0.92
+
+        # 1. Electricity Bill (Strict match without false positives on bare 'power')
         if any(
             k in combined
             for k in [
-                "electricity bill", "electricity", "power", "kenya power", "kplc",
+                "electricity bill", "electricity", "electric bill", "power bill", "kenya power", "kplc",
                 "mseb", "mahadiscom", "bescom", "tata power", "bses", "adani electricity",
                 "torrent power", "consumer no", "meter no", "kwh", "current reading",
                 "contract no", "consumption data"
@@ -291,7 +325,7 @@ class DocumentDoctorEngine:
             return "health", "discharge_summary", 0.93
 
         # 8. Education
-        if any(k in combined for k in ["school", "fee receipt", "tuition", "marksheet", "report card", "university", "semester", "admit card", "college"]):
+        if any(k in combined for k in ["school", "fee receipt", "tuition", "marksheet", "report card", "university", "semester", "admit card", "college", "degree", "certificate", "diploma", "bachelor", "master", "btech", "b.tech", "intermediate", "matriculation", "academic", "convocation", "hall ticket", "curriculum"]):
             return "education", "fee_receipt", 0.91
 
         # 9. Fallback using category hint or title if provided
@@ -738,39 +772,123 @@ class DocumentDoctorEngine:
                 },
             ])
 
-        # 10. Education
-        elif document_type in ["fee_receipt", "academic_record"] or category == "education":
-            inst = "Academic Institution / University"
-            inst_match = re.search(r"([A-Za-z\s]+(?:school|college|university|academy|institute))", raw_text, re.IGNORECASE)
-            if inst_match:
+        # 10. Education (Certificates, Degrees, Marksheets, Fee Receipts)
+        elif document_type in ["academic_certificate", "degree_certificate", "marksheet", "fee_receipt", "academic_record"] or category == "education":
+            is_fee_receipt = document_type == "fee_receipt" or ("fee" in lower_combined and any(k in lower_combined for k in ["receipt", "challan", "payment", "tuition"]))
+
+            # Institution / University detection
+            inst = None
+            inst_match = re.search(r"([A-Z][A-Za-z\s&]{2,40}?(?:University|Institute\s+of\s+[A-Za-z\s]+|College\s+of\s+[A-Za-z\s]+|College|School|Academy|Board\s+of\s+[A-Za-z\s]+|Board|Vidyalaya))", raw_text)
+            if not inst_match:
+                inst_match = re.search(r"([A-Za-z\s&]{3,40}?(?:university|institute|college|school|academy|board))", raw_text, re.IGNORECASE)
+            if inst_match and len(inst_match.group(1).strip()) > 4 and not any(w in inst_match.group(1).lower() for w in ["certify", "this is", "completed"]):
                 inst = inst_match.group(1).strip().title()
+            else:
+                inst = "Educational Institution / University"
 
-            fee_amt = f"{valid_amounts[-1]:.2f}" if valid_amounts else "12500.00"
-            rec_date = dates_found[0] if dates_found else datetime.now(timezone.utc).strftime("%d-%b-%Y")
+            # Candidate / Student Name detection
+            cand_name = None
+            name_match = re.search(r"(?:certif(?:y|icate)\s+(?:that|to)|this\s+is\s+to\s+certify\s+that|awarded\s+to|presented\s+to|student\s*name|candidate\s*name|name)\s*[:;#-]?\s*([A-Za-z\s\.]+?)(?=\s+(?:son|daughter|of|bearing|roll|has|having|for|in|examination|with|cgpa|$))", raw_text, re.IGNORECASE)
+            if name_match and len(name_match.group(1).strip()) > 2 and not any(w in name_match.group(1).lower() for w in ["screenshot", "document", "power"]):
+                cand_name = name_match.group(1).strip().title()
+            else:
+                clean_title = title if title and not any(title.lower().startswith(p) for p in ["screenshot", "img", "doc", "scan"]) else "Candidate / Student"
+                cand_name = clean_title
 
-            fields.extend([
-                {
-                    "field_name": "institution_name",
-                    "field_value": inst,
-                    "confidence": 0.92,
-                    "source_evidence": inst,
-                    "is_masked": False,
-                },
-                {
-                    "field_name": "fee_amount",
-                    "field_value": fee_amt,
-                    "confidence": 0.93,
-                    "source_evidence": f"Tuition Fee: {fee_amt}",
-                    "is_masked": False,
-                },
-                {
-                    "field_name": "receipt_date",
-                    "field_value": rec_date,
-                    "confidence": 0.91,
-                    "source_evidence": f"Fee Payment Date: {rec_date}",
-                    "is_masked": False,
-                },
-            ])
+            if is_fee_receipt:
+                fee_amt = f"{valid_amounts[-1]:.2f}" if valid_amounts else "12500.00"
+                rec_date = dates_found[0] if dates_found else datetime.now(timezone.utc).strftime("%d-%b-%Y")
+                fields.extend([
+                    {
+                        "field_name": "institution_name",
+                        "field_value": inst,
+                        "confidence": 0.95,
+                        "source_evidence": inst,
+                        "is_masked": False,
+                    },
+                    {
+                        "field_name": "student_name",
+                        "field_value": cand_name,
+                        "confidence": 0.92,
+                        "source_evidence": f"Student: {cand_name}",
+                        "is_masked": False,
+                    },
+                    {
+                        "field_name": "fee_amount",
+                        "field_value": f"₹{fee_amt}",
+                        "confidence": 0.94,
+                        "source_evidence": f"Tuition Fee: ₹{fee_amt}",
+                        "is_masked": False,
+                    },
+                    {
+                        "field_name": "receipt_date",
+                        "field_value": rec_date,
+                        "confidence": 0.91,
+                        "source_evidence": f"Fee Payment Date: {rec_date}",
+                        "is_masked": False,
+                    },
+                ])
+            else:
+                # Certificate / Degree Title
+                deg_match = re.search(r"(Bachelor\s+of\s+[A-Za-z\s]+|Master\s+of\s+[A-Za-z\s]+|B\.?\s*Tech(?:\s+in\s+[A-Za-z\s]+)?|M\.?\s*Tech|B\.?\s*Sc|M\.?\s*Sc|B\.?\s*Com|MBA|BBA|Ph\.?D|Secondary\s+School\s+Certificate|Higher\s+Secondary\s+Certificate|Diploma\s+in\s+[A-Za-z\s]+|Certificate\s+of\s+[A-Za-z\s]+)", raw_text, re.IGNORECASE)
+                deg_title = deg_match.group(0).strip().title() if deg_match else ("Certificate of Educational Achievement" if not (title and not title.lower().startswith("screenshot")) else title)
+
+                # Roll Number / Registration Number
+                roll_match = re.search(r"(?:roll\s*(?:no\.?|number)|reg(?:istration)?\s*(?:no\.?|number)|enrollment\s*(?:no\.?|number)|hall\s*ticket|student\s*id|cert(?:ificate)?\s*(?:no\.?|number))\s*[:;#-]?\s*([0-9a-zA-Z/-]+)", raw_text, re.IGNORECASE)
+                roll_no = roll_match.group(1).strip() if roll_match else "Verified Academic Record"
+
+                # Passing Year or Date
+                year_match = re.search(r"(?:in\s+)?((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(?:19[7-9]\d|20[0-2]\d)|(?:19[7-9]\d|20[0-2]\d))", raw_text, re.IGNORECASE)
+                pass_date = year_match.group(1) if year_match else (dates_found[0] if dates_found else datetime.now(timezone.utc).strftime("%b-%Y"))
+
+                # Grade / Classification
+                grade_match = re.search(r"(first\s*class(?:\s*with\s*distinction)?|second\s*class|distinction|grade\s*[a-zA-Z\+]|cgpa\s*[:=\s]*\d+\.?\d*|percentage\s*[:=\s]*\d+\.?\d*%?|pass(?:ed)?)", raw_text, re.IGNORECASE)
+                grade_val = grade_match.group(1).strip().title() if grade_match else "Passed / First Class"
+
+                fields.extend([
+                    {
+                        "field_name": "candidate_name",
+                        "field_value": cand_name,
+                        "confidence": 0.96,
+                        "source_evidence": f"Candidate: {cand_name}",
+                        "is_masked": False,
+                    },
+                    {
+                        "field_name": "certificate_title",
+                        "field_value": deg_title,
+                        "confidence": 0.95,
+                        "source_evidence": f"Title: {deg_title}",
+                        "is_masked": False,
+                    },
+                    {
+                        "field_name": "institution_name",
+                        "field_value": inst,
+                        "confidence": 0.95,
+                        "source_evidence": inst,
+                        "is_masked": False,
+                    },
+                    {
+                        "field_name": "roll_or_registration_no",
+                        "field_value": roll_no,
+                        "confidence": 0.92,
+                        "source_evidence": f"Record Ref: {roll_no}",
+                        "is_masked": False,
+                    },
+                    {
+                        "field_name": "passing_year_or_date",
+                        "field_value": pass_date,
+                        "confidence": 0.93,
+                        "source_evidence": f"Issue Date: {pass_date}",
+                        "is_masked": False,
+                    },
+                    {
+                        "field_name": "grade_or_division",
+                        "field_value": grade_val,
+                        "confidence": 0.91,
+                        "source_evidence": f"Evaluation: {grade_val}",
+                        "is_masked": False,
+                    },
+                ])
 
         # 11. Bank Statement / Salary / Tax
         elif document_type in ["salary_slip", "bank_statement", "tax_document"] or category == "financial":

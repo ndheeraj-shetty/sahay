@@ -149,6 +149,17 @@ async def upload_document(
             doc_cat = DocumentCategory.OTHER
 
     effective_type = document_type or detected_type
+    
+    # Boundary Guard: Never cross category boundaries
+    if doc_cat == DocumentCategory.EDUCATION and effective_type not in ["academic_certificate", "degree_certificate", "marksheet", "fee_receipt", "academic_record"]:
+        effective_type = "academic_certificate"
+    elif doc_cat == DocumentCategory.IDENTITY and effective_type not in ["aadhaar_card", "pan_card", "passport", "driving_licence", "voter_id", "identity_card"]:
+        effective_type = "identity_card"
+    elif doc_cat == DocumentCategory.HEALTH and effective_type not in ["prescription", "lab_report", "discharge_summary", "medical_record"]:
+        effective_type = "medical_record"
+    elif doc_cat == DocumentCategory.FINANCIAL and effective_type not in ["insurance_policy", "loan_statement", "salary_slip", "bank_statement", "tax_document", "financial_record"]:
+        effective_type = "financial_record"
+
     fields = DocumentDoctorEngine.extract_structured_fields(
         ocr_text, effective_type, original_filename, title, doc_cat.value
     )

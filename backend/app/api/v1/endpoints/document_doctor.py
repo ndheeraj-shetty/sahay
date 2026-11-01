@@ -60,7 +60,19 @@ async def process_document(
         ocr_text, doc.file_name, doc.title, doc.category.value if doc.category else ""
     )
 
-    effective_type = detected_type if doc.document_type == "general" else doc.document_type
+    effective_type = detected_type if doc.document_type in ["general", "electricity_bill"] and doc.category.value != "household" else doc.document_type
+    
+    # Boundary Guard: Never cross category boundaries
+    doc_cat_val = doc.category.value if doc.category else detected_cat
+    if doc_cat_val == "education" and effective_type not in ["academic_certificate", "degree_certificate", "marksheet", "fee_receipt", "academic_record"]:
+        effective_type = "academic_certificate"
+    elif doc_cat_val == "identity" and effective_type not in ["aadhaar_card", "pan_card", "passport", "driving_licence", "voter_id", "identity_card"]:
+        effective_type = "identity_card"
+    elif doc_cat_val == "health" and effective_type not in ["prescription", "lab_report", "discharge_summary", "medical_record"]:
+        effective_type = "medical_record"
+    elif doc_cat_val == "financial" and effective_type not in ["insurance_policy", "loan_statement", "salary_slip", "bank_statement", "tax_document", "financial_record"]:
+        effective_type = "financial_record"
+
     fields = DocumentDoctorEngine.extract_structured_fields(
         ocr_text,
         effective_type,
